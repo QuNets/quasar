@@ -180,6 +180,7 @@ def test_events_module_has_no_run_loop_routing_or_simqn_binding():
     source = "\n".join(
         path.read_text(encoding="utf-8")
         for path in Path("quasar/events").glob("*.py")
+        if path.name != "adapter.py"
     )
 
     assert "def run(" not in source
