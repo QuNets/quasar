@@ -1,4 +1,4 @@
-"""Boundary tests for Stage 6A routing scope."""
+"""Boundary tests for routing scope."""
 
 from pathlib import Path
 
@@ -22,11 +22,9 @@ def test_routing_does_not_implement_events_or_run_loop():
     assert "100 ms" not in source
 
 
-def test_easr_objective_and_edge_weight_are_not_implemented_yet():
-    source = _routing_source()
+def test_easr_remains_oos_only_and_separate_from_sd():
+    source = Path("quasar/routing/easr.py").read_text(encoding="utf-8")
 
-    assert not Path("quasar/routing/easr.py").exists()
-    assert "omega_uv" not in source
-    assert "DeltaTau" not in source
-    assert "zeta_swap" not in source
-    assert "xi *" not in source
+    assert Path("quasar/routing/easr.py").exists()
+    assert "SimultaneousDownlinkArchitecture" not in source
+    assert "find_simultaneous_downlink_opportunities" not in source
