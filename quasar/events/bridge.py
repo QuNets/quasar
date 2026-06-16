@@ -27,4 +27,3 @@ class EventBridge:
         """Record an event emitted by the QUASAR overlay."""
 
         self.events.append((event_type, payload))
-

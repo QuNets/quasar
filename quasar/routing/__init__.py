@@ -3,4 +3,3 @@
 from quasar.routing.base import EntanglementRequest, RouteResult, Router
 
 __all__ = ["EntanglementRequest", "RouteResult", "Router"]
-

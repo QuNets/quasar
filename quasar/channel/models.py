@@ -27,4 +27,3 @@ class EdgeAttributes:
     storage_delay: Optional[float] = None
     fidelity: Optional[float] = None
     routing_weight: Optional[float] = None
-

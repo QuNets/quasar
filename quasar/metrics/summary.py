@@ -19,4 +19,3 @@ class MetricSummary:
     average_fidelity: Optional[float] = None
     average_success_probability: Optional[float] = None
     event_counts: Dict[EventType, int] = field(default_factory=dict)
-

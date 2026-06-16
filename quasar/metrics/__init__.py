@@ -3,4 +3,3 @@
 from quasar.metrics.summary import MetricSummary
 
 __all__ = ["MetricSummary"]
-

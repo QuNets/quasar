@@ -38,4 +38,3 @@ class Router(ABC):
     def compute_route(self, graph: Any, request: EntanglementRequest, time: float) -> RouteResult:
         """Compute a route over a dynamic graph snapshot."""
         raise NotImplementedError
-

@@ -15,4 +15,3 @@ class Architecture(ABC):
     def find_opportunities(self, graph: Any, request: Any, time: float) -> Sequence[Any]:
         """Return feasible distribution opportunities at the given time."""
         raise NotImplementedError
-

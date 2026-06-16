@@ -17,4 +17,3 @@ def fidelity_after_storage(delta_tau: float, f0: float, tau_c: float) -> float:
     if tau_c <= 0:
         raise ValueError("tau_c must be positive")
     return 0.25 + (f0 - 0.25) * math.exp(-delta_tau / tau_c)
-

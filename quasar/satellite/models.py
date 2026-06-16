@@ -48,4 +48,3 @@ class LinkState:
     distance_km: Optional[float] = None
     elevation_deg: Optional[float] = None
     updated_at: Optional[float] = None
-
