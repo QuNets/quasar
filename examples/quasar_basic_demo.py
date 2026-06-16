@@ -5,9 +5,9 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from quasar.api import QuasarSimulator
-from quasar.channel.models import ChannelParameters, EdgeType
-from quasar.satellite.models import LinkState
+from quasar.api import QuasarSimulator  # noqa: E402
+from quasar.channel.models import ChannelParameters, EdgeType  # noqa: E402
+from quasar.satellite.models import LinkState  # noqa: E402
 
 
 def _format_float(value, digits=4, suffix=""):
