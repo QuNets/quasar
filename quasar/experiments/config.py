@@ -83,8 +83,16 @@ class WorkloadConfig:
             raise ValueError("SD architecture requires the sd router")
         if architecture == "oos" and routing_algorithm not in ("dsp", "mpr", "easr"):
             raise ValueError("OOS architecture requires dsp, mpr, or easr")
-        if self.storage_delay_policy not in ("zero_policy", "synthetic_demo"):
-            raise ValueError("storage_delay_policy must be zero_policy or synthetic_demo")
+        allowed_storage_delay_policies = (
+            "zero_policy",
+            "synthetic_demo",
+            "contact_window_age",
+        )
+        if self.storage_delay_policy not in allowed_storage_delay_policies:
+            raise ValueError(
+                "storage_delay_policy must be zero_policy, synthetic_demo, "
+                "or contact_window_age"
+            )
         if self.synthetic_storage_delay < 0:
             raise ValueError("synthetic_storage_delay must be non-negative")
         if self.temporal_penalty_xi < 0:

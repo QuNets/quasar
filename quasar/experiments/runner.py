@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Iterable, Tuple
+from typing import Iterable, Optional, Tuple
 
 from quasar.channel.loss import total_transmittance
 from quasar.channel.models import EdgeAttributes
@@ -18,6 +18,7 @@ from quasar.metrics import EdgeTrace, EventLog, MetricSummary, PathTrace
 from quasar.routing import OOSDSPRouter, OOSEASRRouter, OOSMPRRouter, SDRouter
 from quasar.satellite.models import LinkState
 from quasar.scenarios import WalkerDeltaConfig, WalkerDeltaLiteSource
+from quasar.timing import ContactSchedule, StorageDelayEstimator
 from quasar.topology.engine import SpatiotemporalTopologyEngine
 from quasar.topology.graph import TopologySnapshot
 
@@ -35,6 +36,7 @@ class QuasarExperimentRunner:
             self.config.controlled_pair
         )
         source = self._scenario_source((source_station, destination_station))
+        storage_delay_estimator = self._storage_delay_estimator(source)
         workload = FixedPairWorkload(source_station, destination_station)
         event_bridge = EventBridge()
         event_log = EventLog()
@@ -50,7 +52,10 @@ class QuasarExperimentRunner:
         for time in self.config.time_points:
             frame = source.frame_at(time)
             snapshot = self._build_snapshot(frame)
-            attributed_snapshot, edge_attributes = self._attribute_snapshot(snapshot)
+            attributed_snapshot, edge_attributes = self._attribute_snapshot(
+                snapshot,
+                storage_delay_estimator,
+            )
             snapshot_edge_counts.append(
                 self._snapshot_edge_count(attributed_snapshot)
             )
@@ -60,6 +65,7 @@ class QuasarExperimentRunner:
                     "edge_attributes": edge_attributes,
                     "swap_success_probability": self.config.baseline.zeta_swap,
                     "storage_delay_source": self._storage_delay_source(),
+                    "storage_delay_policy": self.config.workload.storage_delay_policy,
                 }
             )
             route_result = self._route(attributed_snapshot, request, time)
@@ -69,7 +75,7 @@ class QuasarExperimentRunner:
                     time=time,
                     edge=attributes.endpoints,
                     attributes=attributes,
-                    metadata={"storage_delay_source": self._storage_delay_source()},
+                    metadata=self._storage_delay_metadata(),
                 )
             path_trace.record(
                 time=time,
@@ -77,7 +83,7 @@ class QuasarExperimentRunner:
                 request=request,
                 architecture=self.config.architecture,
                 algorithm=self.config.routing_algorithm,
-                metadata={"storage_delay_source": self._storage_delay_source()},
+                metadata=self._storage_delay_metadata(),
             )
             if previous_snapshot is not None:
                 events = event_bridge.detect_events(
@@ -125,12 +131,28 @@ class QuasarExperimentRunner:
                     destination_station.name,
                 ),
                 "storage_delay_source": self._storage_delay_source(),
+                **self._storage_delay_metadata(),
                 "snapshot_edge_counts": tuple(snapshot_edge_counts),
                 "total_candidate_edges": total_candidate_edges,
                 "total_available_edges": total_available_edges,
                 "topology_available_edge_ratio": topology_available_edge_ratio,
             },
         )
+
+    def _storage_delay_estimator(
+        self,
+        source: WalkerDeltaLiteSource,
+    ) -> Optional[StorageDelayEstimator]:
+        if self.config.workload.storage_delay_policy != "contact_window_age":
+            return None
+        schedule = ContactSchedule.from_source(
+            source=source,
+            time_points=self.config.time_points,
+            min_elevation_deg=self.config.baseline.min_elevation_deg,
+            max_sgl_range_km=self.config.max_sgl_range_km,
+            max_isl_range_km=self.config.max_isl_range_km,
+        )
+        return StorageDelayEstimator(schedule)
 
     def _scenario_source(self, ground_stations: Iterable) -> WalkerDeltaLiteSource:
         baseline = self.config.baseline
@@ -164,8 +186,16 @@ class QuasarExperimentRunner:
     def _attribute_snapshot(
         self,
         snapshot: TopologySnapshot,
+        storage_delay_estimator: Optional[StorageDelayEstimator] = None,
     ) -> Tuple[TopologySnapshot, Tuple[EdgeAttributes, ...]]:
-        attributed_edges = tuple(self._attribute_link(edge) for edge in snapshot.edges)
+        attributed_edges = tuple(
+            self._attribute_link(
+                edge,
+                snapshot.time,
+                storage_delay_estimator,
+            )
+            for edge in snapshot.edges
+        )
         attributed_snapshot = TopologySnapshot(
             time=snapshot.time,
             nodes=snapshot.nodes,
@@ -192,12 +222,21 @@ class QuasarExperimentRunner:
             "topology_available_edge_ratio": topology_available_edge_ratio,
         }
 
-    def _attribute_link(self, edge: LinkState) -> LinkState:
-        storage_delay = self._storage_delay(edge)
+    def _attribute_link(
+        self,
+        edge: LinkState,
+        time: float,
+        storage_delay_estimator: Optional[StorageDelayEstimator] = None,
+    ) -> LinkState:
+        storage_delay, storage_metadata = self._storage_delay(
+            edge,
+            time,
+            storage_delay_estimator,
+        )
         metadata = {
             **edge.metadata,
             "storage_delay": storage_delay,
-            "storage_delay_source": self._storage_delay_source(),
+            **storage_metadata,
         }
         if not edge.available:
             return replace(edge, metadata=metadata)
@@ -216,7 +255,7 @@ class QuasarExperimentRunner:
         )
 
     def _edge_attributes(self, edge: LinkState) -> EdgeAttributes:
-        storage_delay = edge.metadata.get("storage_delay", self._storage_delay(edge))
+        storage_delay = edge.metadata.get("storage_delay", 0.0)
         transmittance = edge.transmittance
         if transmittance is None:
             transmittance = self._transmittance(edge)
@@ -270,12 +309,39 @@ class QuasarExperimentRunner:
             h0_km=self.config.baseline.h0_km,
         )
 
-    def _storage_delay(self, edge: LinkState) -> float:
-        if self.config.workload.storage_delay_policy == "synthetic_demo":
-            return self.config.workload.synthetic_storage_delay
-        return 0.0
+    def _storage_delay(
+        self,
+        edge: LinkState,
+        time: float,
+        estimator: Optional[StorageDelayEstimator] = None,
+    ) -> Tuple[float, dict]:
+        policy = self.config.workload.storage_delay_policy
+        metadata = self._storage_delay_metadata()
+        if policy == "synthetic_demo":
+            return self.config.workload.synthetic_storage_delay, metadata
+        if policy == "contact_window_age" and estimator is not None:
+            delay = estimator.estimate_edge_delay(
+                edge,
+                time,
+                mode="contact_window_age",
+            )
+            if delay is None:
+                return 0.0, {**metadata, "storage_delay_missing": True}
+            return delay, metadata
+        return 0.0, metadata
 
     def _storage_delay_source(self) -> str:
         if self.config.workload.storage_delay_policy == "synthetic_demo":
             return "synthetic_demo_not_contact_schedule"
+        if self.config.workload.storage_delay_policy == "contact_window_age":
+            return "sampled_contact_schedule_estimator"
         return "zero_policy"
+
+    def _storage_delay_metadata(self) -> dict:
+        metadata = {
+            "storage_delay_source": self._storage_delay_source(),
+            "storage_delay_policy": self.config.workload.storage_delay_policy,
+        }
+        if self.config.workload.storage_delay_policy == "contact_window_age":
+            metadata["not_resource_reservation"] = True
+        return metadata
