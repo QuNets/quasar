@@ -1,6 +1,16 @@
 """Experiment scaffolds for paper-aligned QUASAR smoke runs."""
 
 from quasar.experiments.baseline import houston_washington_pair
+from quasar.experiments.batch import (
+    result_summary_row,
+    results_summary_rows,
+    run_many,
+)
+from quasar.experiments.cases import (
+    DEFAULT_BATCH_TIME_POINTS,
+    ExperimentCase,
+    routing_baseline_cases,
+)
 from quasar.experiments.config import (
     BaselineSimulationConfig,
     ControlledPairConfig,
@@ -14,10 +24,16 @@ from quasar.experiments.workload import FixedPairWorkload
 __all__ = [
     "BaselineSimulationConfig",
     "ControlledPairConfig",
+    "DEFAULT_BATCH_TIME_POINTS",
+    "ExperimentCase",
     "ExperimentConfig",
     "ExperimentResult",
     "FixedPairWorkload",
     "QuasarExperimentRunner",
     "WorkloadConfig",
     "houston_washington_pair",
+    "result_summary_row",
+    "results_summary_rows",
+    "routing_baseline_cases",
+    "run_many",
 ]
