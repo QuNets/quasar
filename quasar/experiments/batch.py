@@ -28,6 +28,12 @@ def result_summary_row(result: ExperimentResult) -> dict:
     case_name = metadata.get("case", result.config.routing_algorithm.upper())
     route_attempts = len(result.route_results)
     route_successes = sum(1 for route in result.route_results if route.success)
+    edge_storage_delay = _average(
+        record.storage_delay for record in result.edge_trace.records
+    )
+    route_storage_delay = _average(
+        record.storage_delay for record in result.path_trace.records
+    )
     return {
         "case": case_name,
         "name": case_name,
@@ -43,6 +49,8 @@ def result_summary_row(result: ExperimentResult) -> dict:
         ),
         "total_events": summary.get("total_events"),
         "average_transmittance": summary.get("average_transmittance"),
+        "average_storage_delay": edge_storage_delay,
+        "average_route_storage_delay": route_storage_delay,
         "average_fidelity": summary.get("average_fidelity"),
         "storage_delay_source": metadata.get("storage_delay_source"),
     }
@@ -64,3 +72,10 @@ def _execute_item(item: ConfigOrCase) -> ExperimentResult:
         }
         return replace(result, metadata=metadata)
     return QuasarExperimentRunner(item).execute()
+
+
+def _average(values) -> float:
+    numeric_values = [value for value in values if value is not None]
+    if not numeric_values:
+        return 0.0
+    return sum(numeric_values) / len(numeric_values)

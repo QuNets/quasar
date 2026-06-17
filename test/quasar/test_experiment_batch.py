@@ -1,6 +1,7 @@
 """Tests for experiment case and batch helpers."""
 
 from pathlib import Path
+from dataclasses import replace
 
 from quasar.experiments import (
     DEFAULT_BATCH_TIME_POINTS,
@@ -93,6 +94,25 @@ def test_results_summary_rows_include_batch_fields():
         assert "topology_available_edge_ratio" in row
         assert "total_events" in row
         assert row["storage_delay_source"] == "zero_policy"
+
+
+def test_summary_rows_include_contact_delay_fields():
+    case = routing_baseline_cases(time_points=(0.0, 1.0), planes=2, satellites_per_plane=2)[0]
+    config = replace(
+        case.config,
+        workload=WorkloadConfig(
+            architecture="oos",
+            routing_algorithm=case.config.routing_algorithm,
+            storage_delay_policy="contact_window_age",
+        ),
+    )
+    result = run_many((ExperimentCase("OOS-DSP", config),))[0]
+    row = results_summary_rows((result,))[0]
+
+    assert row["storage_delay_source"] == "sampled_contact_schedule_estimator"
+    assert "average_storage_delay" in row
+    assert "average_route_storage_delay" in row
+    assert row["average_storage_delay"] > 0.0
 
 
 def test_batch_helpers_have_no_out_of_scope_execution_features():
