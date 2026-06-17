@@ -125,6 +125,39 @@ def test_storage_delay_estimator_returns_non_negative_delay():
     assert estimator.estimate_path_delay(("SAT-1", "GS-A"), 2.5) == 0.5
 
 
+def test_contact_window_age_delay_mode_is_sampled_window_age():
+    schedule = ContactSchedule.from_source(
+        _source_with_gap(),
+        time_points=(0.0, 1.0, 2.0, 3.0),
+        min_elevation_deg=15.0,
+    )
+    estimator = StorageDelayEstimator(schedule)
+
+    active_delay = estimator.estimate_edge_delay(
+        ("SAT-1", "GS-A"),
+        0.5,
+        mode="contact_window_age",
+    )
+    future_delay = estimator.estimate_edge_delay(
+        ("SAT-1", "GS-A"),
+        2.5,
+        mode="contact_window_age",
+    )
+
+    assert active_delay == 0.5
+    assert future_delay == 0.5
+    assert active_delay >= 0.0
+    assert future_delay >= 0.0
+    assert (
+        estimator.estimate_edge_delay(
+            ("SAT-1", "GS-A"),
+            4.0,
+            mode="contact_window_age",
+        )
+        is None
+    )
+
+
 def test_storage_delay_estimator_metadata_is_explicit():
     estimator = StorageDelayEstimator(
         ContactSchedule.from_source(
@@ -138,6 +171,7 @@ def test_storage_delay_estimator_metadata_is_explicit():
         estimator.metadata["storage_delay_source"]
         == "sampled_contact_schedule_estimator"
     )
+    assert estimator.metadata["storage_delay_policy"] == "contact_window_age"
     assert estimator.metadata["not_resource_reservation"] is True
 
 
