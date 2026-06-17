@@ -45,7 +45,7 @@ def _print_summary_table(title, rows):
     print(title)
     print(
         "router  attempts  successes  success_rate  avg_edge_delay  "
-        "avg_route_delay  avg_route_fidelity  events"
+        "avg_route_delay  edge_fid  route_fid  events"
     )
     for row in rows:
         print(
@@ -55,7 +55,8 @@ def _print_summary_table(title, rows):
             f"{_format_float(row['routing_success_rate']):>12} "
             f"{_format_float(row['average_edge_storage_delay']):>14} "
             f"{_format_float(row['average_route_storage_delay']):>15} "
-            f"{_format_float(row['average_route_fidelity']):>18} "
+            f"{_format_float(row['average_edge_fidelity']):>8} "
+            f"{_format_float(row['average_route_fidelity']):>9} "
             f"{row['total_events']:>6}"
         )
     print()

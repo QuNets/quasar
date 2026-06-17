@@ -47,7 +47,7 @@ def _contact_delay_cases():
 def _print_table(rows):
     print(
         "case      router  attempts  successes  success_rate  topo_ratio  "
-        "avg_delay  route_delay  avg_fidelity  events  storage_delay_source"
+        "avg_delay  route_delay  edge_fid  route_fid  events  storage_delay_source"
     )
     for row in rows:
         print(
@@ -59,7 +59,8 @@ def _print_table(rows):
             f"{_format_float(row['topology_available_edge_ratio']):>10} "
             f"{_format_float(row['average_storage_delay']):>9} "
             f"{_format_float(row['average_route_storage_delay']):>11} "
-            f"{_format_float(row['average_fidelity']):>13} "
+            f"{_format_float(row['average_edge_fidelity']):>8} "
+            f"{_format_float(row['average_route_fidelity']):>9} "
             f"{row['total_events']:>6} "
             f"{row['storage_delay_source']}"
         )

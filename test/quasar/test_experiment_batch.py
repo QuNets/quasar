@@ -93,6 +93,8 @@ def test_results_summary_rows_include_batch_fields():
         assert "total_available_edges" in row
         assert "topology_available_edge_ratio" in row
         assert "total_events" in row
+        assert "average_edge_fidelity" in row
+        assert "average_route_fidelity" in row
         assert row["storage_delay_source"] == "zero_policy"
 
 
@@ -113,6 +115,28 @@ def test_summary_rows_include_contact_delay_fields():
     assert "average_storage_delay" in row
     assert "average_route_storage_delay" in row
     assert row["average_storage_delay"] > 0.0
+
+
+def test_summary_rows_distinguish_edge_and_route_fidelity():
+    case = routing_baseline_cases(
+        time_points=(0.0, 300.0, 600.0),
+        planes=6,
+        satellites_per_plane=10,
+    )[1]
+    config = replace(
+        case.config,
+        workload=WorkloadConfig(
+            architecture="oos",
+            routing_algorithm=case.config.routing_algorithm,
+            storage_delay_policy="contact_window_age",
+        ),
+    )
+    result = run_many((ExperimentCase("OOS-MPR", config),))[0]
+    row = results_summary_rows((result,))[0]
+
+    assert "average_edge_fidelity" in row
+    assert "average_route_fidelity" in row
+    assert row["average_edge_fidelity"] != row["average_route_fidelity"]
 
 
 def test_batch_helpers_have_no_out_of_scope_execution_features():

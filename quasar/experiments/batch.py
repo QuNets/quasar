@@ -58,6 +58,7 @@ def result_summary_row(result: ExperimentResult) -> dict:
         "min_route_storage_delay": delay_summary.get("min_route_storage_delay"),
         "max_route_storage_delay": delay_summary.get("max_route_storage_delay"),
         "average_route_fidelity": delay_summary.get("average_route_fidelity"),
+        "average_edge_fidelity": summary.get("average_fidelity"),
         "average_fidelity": summary.get("average_fidelity"),
         "storage_delay_source": metadata.get("storage_delay_source"),
         "storage_delay_policy": metadata.get("storage_delay_policy"),
