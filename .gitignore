@@ -15,3 +15,10 @@ qns/**/*.pyd
 .idea
 .eggs
 docs/quasar_design_private/
+
+private_experiments/
+paper_results/
+figure_scripts/
+results/
+notebooks/
+*.ipynb_checkpoints/
