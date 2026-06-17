@@ -17,6 +17,11 @@ from quasar.experiments.config import (
     ExperimentConfig,
     WorkloadConfig,
 )
+from quasar.experiments.diagnostics import (
+    result_diagnostics,
+    route_diagnostic_rows,
+    storage_delay_summary,
+)
 from quasar.experiments.result import ExperimentResult
 from quasar.experiments.runner import QuasarExperimentRunner
 from quasar.experiments.workload import FixedPairWorkload
@@ -33,7 +38,10 @@ __all__ = [
     "WorkloadConfig",
     "houston_washington_pair",
     "result_summary_row",
+    "result_diagnostics",
     "results_summary_rows",
+    "route_diagnostic_rows",
     "routing_baseline_cases",
     "run_many",
+    "storage_delay_summary",
 ]

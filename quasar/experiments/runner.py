@@ -83,7 +83,10 @@ class QuasarExperimentRunner:
                 request=request,
                 architecture=self.config.architecture,
                 algorithm=self.config.routing_algorithm,
-                metadata=self._storage_delay_metadata(),
+                metadata={
+                    **self._storage_delay_metadata(),
+                    **self._route_diagnostics_metadata(route_result, request),
+                },
             )
             if previous_snapshot is not None:
                 events = event_bridge.detect_events(
@@ -295,6 +298,101 @@ class QuasarExperimentRunner:
                 default_swap_success_probability=self.config.baseline.zeta_swap,
             )
         return router.compute_route(snapshot, request, time)
+
+    def _route_diagnostics_metadata(self, route_result, request) -> dict:
+        path = tuple(getattr(route_result, "path", ()) or ())
+        if len(path) < 2:
+            if getattr(route_result, "success", False):
+                return {
+                    "hop_count": 0,
+                    "route_storage_delay": 0.0,
+                    "route_success_probability": getattr(
+                        route_result,
+                        "success_probability",
+                        None,
+                    ),
+                    "route_fidelity": getattr(route_result, "fidelity", None),
+                }
+            return {"hop_count": 0}
+
+        computed = self._compute_path_diagnostics(
+            path,
+            request.metadata.get("edge_attributes", ()),
+        )
+        existing_delay = getattr(route_result, "storage_delay", None)
+        route_storage_delay = self._prefer_existing_or_computed(
+            existing_delay,
+            computed["route_storage_delay"],
+        )
+        route_success_probability = self._prefer_existing_or_computed(
+            getattr(route_result, "success_probability", None),
+            computed["route_success_probability"],
+        )
+        route_fidelity = getattr(route_result, "fidelity", None)
+        if route_fidelity is None or (
+            route_storage_delay
+            and existing_delay in (None, 0.0)
+            and computed["route_fidelity"] is not None
+        ):
+            route_fidelity = computed["route_fidelity"]
+        return {
+            "hop_count": computed["hop_count"],
+            "route_storage_delay": route_storage_delay,
+            "route_success_probability": route_success_probability,
+            "route_fidelity": route_fidelity,
+            "diagnostic_delay_source": self._storage_delay_source(),
+        }
+
+    def _compute_path_diagnostics(self, path: Tuple[str, ...], edge_attributes) -> dict:
+        edge_map = self._edge_attribute_map(edge_attributes)
+        storage_delay = 0.0
+        success_probability = 1.0
+        missing = False
+        for first, second in zip(path, path[1:]):
+            edge = edge_map.get((first, second))
+            if edge is None:
+                missing = True
+                continue
+            storage_delay += getattr(edge, "storage_delay", None) or 0.0
+            probability = getattr(edge, "success_probability", None)
+            if probability is None:
+                probability = getattr(edge, "transmittance", None)
+            if probability is not None:
+                success_probability *= probability
+        fidelity = None
+        if not missing:
+            fidelity = fidelity_after_storage(
+                delta_tau=storage_delay,
+                f0=self.config.baseline.f0,
+                tau_c=self.config.baseline.tau_c,
+            )
+        return {
+            "hop_count": max(0, len(path) - 1),
+            "route_storage_delay": None if missing else storage_delay,
+            "route_success_probability": None if missing else success_probability,
+            "route_fidelity": fidelity,
+        }
+
+    def _edge_attribute_map(self, edge_attributes) -> dict:
+        edge_map = {}
+        for edge in edge_attributes:
+            endpoints = getattr(edge, "endpoints", None)
+            if endpoints is None or len(endpoints) != 2:
+                continue
+            first, second = endpoints
+            edge_map[(first, second)] = edge
+            edge_map[(second, first)] = edge
+        return edge_map
+
+    @staticmethod
+    def _prefer_existing_or_computed(existing, computed):
+        if computed is None:
+            return existing
+        if existing is None:
+            return computed
+        if existing == 0.0 and computed > 0.0:
+            return computed
+        return existing
 
     def _transmittance(self, edge: LinkState) -> float:
         eta0 = edge.transmittance

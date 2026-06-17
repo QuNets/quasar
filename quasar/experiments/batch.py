@@ -7,6 +7,7 @@ from typing import Iterable, Tuple, Union
 
 from quasar.experiments.cases import ExperimentCase
 from quasar.experiments.config import ExperimentConfig
+from quasar.experiments.diagnostics import storage_delay_summary
 from quasar.experiments.result import ExperimentResult
 from quasar.experiments.runner import QuasarExperimentRunner
 
@@ -25,14 +26,12 @@ def result_summary_row(result: ExperimentResult) -> dict:
 
     summary = result.summary_dict()
     metadata = result.metadata
+    delay_summary = storage_delay_summary(result)
     case_name = metadata.get("case", result.config.routing_algorithm.upper())
     route_attempts = len(result.route_results)
     route_successes = sum(1 for route in result.route_results if route.success)
     edge_storage_delay = _average(
         record.storage_delay for record in result.edge_trace.records
-    )
-    route_storage_delay = _average(
-        record.storage_delay for record in result.path_trace.records
     )
     return {
         "case": case_name,
@@ -50,9 +49,18 @@ def result_summary_row(result: ExperimentResult) -> dict:
         "total_events": summary.get("total_events"),
         "average_transmittance": summary.get("average_transmittance"),
         "average_storage_delay": edge_storage_delay,
-        "average_route_storage_delay": route_storage_delay,
+        "average_edge_storage_delay": delay_summary.get(
+            "average_edge_storage_delay"
+        ),
+        "average_route_storage_delay": delay_summary.get(
+            "average_route_storage_delay"
+        ),
+        "min_route_storage_delay": delay_summary.get("min_route_storage_delay"),
+        "max_route_storage_delay": delay_summary.get("max_route_storage_delay"),
+        "average_route_fidelity": delay_summary.get("average_route_fidelity"),
         "average_fidelity": summary.get("average_fidelity"),
         "storage_delay_source": metadata.get("storage_delay_source"),
+        "storage_delay_policy": metadata.get("storage_delay_policy"),
     }
 
 
