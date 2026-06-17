@@ -35,6 +35,7 @@ class ExperimentResult:
     def to_dict(self) -> dict:
         """Return a compact experiment result dictionary."""
 
+        metadata = dict(self.metadata)
         return {
             "architecture": self.config.architecture,
             "routing_algorithm": self.config.routing_algorithm,
@@ -43,6 +44,11 @@ class ExperimentResult:
             "snapshot_count": len(self.snapshots),
             "route_attempts": len(self.route_results),
             "route_successes": sum(1 for result in self.route_results if result.success),
+            "total_candidate_edges": metadata.get("total_candidate_edges"),
+            "total_available_edges": metadata.get("total_available_edges"),
+            "topology_available_edge_ratio": metadata.get(
+                "topology_available_edge_ratio"
+            ),
             "summary": self.summary_dict(),
-            "metadata": dict(self.metadata),
+            "metadata": metadata,
         }

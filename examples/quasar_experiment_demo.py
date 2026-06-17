@@ -22,6 +22,8 @@ def _print_config(config):
     print(f"architecture:        {config.architecture.upper()}")
     print(f"routing workload:    {config.routing_algorithm.upper()}")
     print(f"time points:         {config.time_points}")
+    print(f"planes:              {config.planes}")
+    print(f"satellites/plane:    {config.satellites_per_plane}")
     print(f"altitude:            {_format_float(baseline.altitude_km, digits=1, suffix=' km')}")
     print(f"inclination:         {_format_float(baseline.inclination_deg, digits=1, suffix=' deg')}")
     print(f"dt:                  {_format_float(baseline.dt, digits=1, suffix=' s')}")
@@ -39,6 +41,7 @@ def _print_config(config):
 
 def _print_result(result):
     summary = result.summary.to_dict()
+    metadata = result.metadata
     route_attempts = len(result.route_results)
     route_successes = sum(1 for route in result.route_results if route.success)
     print("Experiment result")
@@ -46,8 +49,14 @@ def _print_result(result):
     print(f"route attempts:         {route_attempts}")
     print(f"route successes:        {route_successes}")
     print(f"routing success rate:   {_format_float(summary['routing_success_rate'])}")
+    print(f"total candidate edges:  {metadata['total_candidate_edges']}")
+    print(f"total available edges:  {metadata['total_available_edges']}")
+    print(
+        "topology edge ratio:    "
+        f"{_format_float(metadata['topology_available_edge_ratio'])}"
+    )
     print(f"total events:           {summary['total_events']}")
-    print(f"available edge ratio:   {_format_float(summary['available_edge_ratio'])}")
+    print(f"trace edge ratio:       {_format_float(summary['available_edge_ratio'])}")
     print(f"average transmittance:  {_format_float(summary['average_transmittance'])}")
     print(f"average fidelity:       {_format_float(summary['average_fidelity'])}")
     print("event counts:")
@@ -57,7 +66,11 @@ def _print_result(result):
 
 
 def main() -> None:
-    config = ExperimentConfig()
+    config = ExperimentConfig(
+        planes=6,
+        satellites_per_plane=10,
+        time_points=(0.0, 300.0, 600.0, 900.0, 1200.0, 1500.0),
+    )
     result = QuasarExperimentRunner(config).execute()
 
     print("# QUASAR experiment demo")

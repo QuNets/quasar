@@ -43,6 +43,7 @@ class QuasarExperimentRunner:
         frames = []
         snapshots = []
         route_results = []
+        snapshot_edge_counts = []
         previous_snapshot = None
         previous_route = None
 
@@ -50,6 +51,9 @@ class QuasarExperimentRunner:
             frame = source.frame_at(time)
             snapshot = self._build_snapshot(frame)
             attributed_snapshot, edge_attributes = self._attribute_snapshot(snapshot)
+            snapshot_edge_counts.append(
+                self._snapshot_edge_count(attributed_snapshot)
+            )
             request = workload.request_at(time)
             request.metadata.update(
                 {
@@ -94,6 +98,17 @@ class QuasarExperimentRunner:
             previous_route = route_result
 
         summary = MetricSummary.from_logs(event_log, edge_trace, path_trace)
+        total_candidate_edges = sum(
+            item["candidate_edge_count"] for item in snapshot_edge_counts
+        )
+        total_available_edges = sum(
+            item["available_edge_count"] for item in snapshot_edge_counts
+        )
+        topology_available_edge_ratio = 0.0
+        if total_candidate_edges:
+            topology_available_edge_ratio = (
+                total_available_edges / total_candidate_edges
+            )
         return ExperimentResult(
             config=self.config,
             frames=tuple(frames),
@@ -110,6 +125,10 @@ class QuasarExperimentRunner:
                     destination_station.name,
                 ),
                 "storage_delay_source": self._storage_delay_source(),
+                "snapshot_edge_counts": tuple(snapshot_edge_counts),
+                "total_candidate_edges": total_candidate_edges,
+                "total_available_edges": total_available_edges,
+                "topology_available_edge_ratio": topology_available_edge_ratio,
             },
         )
 
@@ -157,6 +176,21 @@ class QuasarExperimentRunner:
             for edge in attributed_snapshot.available_edges
         )
         return attributed_snapshot, edge_attributes
+
+    def _snapshot_edge_count(self, snapshot: TopologySnapshot) -> dict:
+        candidate_edge_count = len(snapshot.edges)
+        available_edge_count = len(snapshot.available_edges)
+        topology_available_edge_ratio = 0.0
+        if candidate_edge_count:
+            topology_available_edge_ratio = (
+                available_edge_count / candidate_edge_count
+            )
+        return {
+            "time": snapshot.time,
+            "candidate_edge_count": candidate_edge_count,
+            "available_edge_count": available_edge_count,
+            "topology_available_edge_ratio": topology_available_edge_ratio,
+        }
 
     def _attribute_link(self, edge: LinkState) -> LinkState:
         storage_delay = self._storage_delay(edge)

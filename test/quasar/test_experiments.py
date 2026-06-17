@@ -81,6 +81,31 @@ def test_experiment_runner_execute_returns_result_with_traces():
     assert result.summary.path_count == 3
     assert result.summary.edge_record_count == len(result.edge_trace.records)
     assert result.metadata["scenario_source"] == "WalkerDeltaLiteSource"
+    assert "topology_available_edge_ratio" in result.metadata
+    assert result.to_dict()["total_candidate_edges"] == (
+        result.metadata["total_candidate_edges"]
+    )
+
+
+def test_topology_edge_ratio_is_based_on_snapshots_not_edge_trace():
+    result = QuasarExperimentRunner(ExperimentConfig()).execute()
+    counts = result.metadata["snapshot_edge_counts"]
+    total_candidate_edges = sum(len(snapshot.edges) for snapshot in result.snapshots)
+    total_available_edges = sum(
+        len(snapshot.available_edges) for snapshot in result.snapshots
+    )
+
+    assert len(counts) == len(result.snapshots)
+    assert result.metadata["total_candidate_edges"] == total_candidate_edges
+    assert result.metadata["total_available_edges"] == total_available_edges
+    assert result.metadata["topology_available_edge_ratio"] == pytest.approx(
+        total_available_edges / total_candidate_edges
+    )
+    assert result.metadata["total_available_edges"] == len(result.edge_trace.records)
+    assert result.metadata["total_candidate_edges"] > len(result.edge_trace.records)
+    assert result.metadata["topology_available_edge_ratio"] < (
+        result.summary.available_edge_ratio
+    )
 
 
 @pytest.mark.parametrize("algorithm", ("dsp", "mpr", "easr"))
