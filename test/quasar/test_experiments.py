@@ -24,7 +24,7 @@ def test_baseline_parameters_match_paper_direction():
     assert baseline.dt == 0.1
     assert baseline.min_elevation_deg == 15.0
     assert baseline.eta0 == 1e-3
-    assert baseline.alpha == 0.15
+    assert baseline.alpha == 0.01
     assert baseline.h0_km == 20.0
     assert baseline.kappa == 0.85
     assert baseline.zeta_swap == 0.60

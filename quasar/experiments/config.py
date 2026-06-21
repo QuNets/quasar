@@ -15,7 +15,7 @@ class BaselineSimulationConfig:
     dt: float = 0.1
     min_elevation_deg: float = 15.0
     eta0: float = 1e-3
-    alpha: float = 0.15
+    alpha: float = 0.01
     h0_km: float = 20.0
     kappa: float = 0.85
     zeta_swap: float = 0.60

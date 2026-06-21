@@ -47,7 +47,8 @@ def _contact_delay_cases():
 def _print_table(rows):
     print(
         "case      router  attempts  successes  success_rate  topo_ratio  "
-        "avg_delay  route_delay  edge_fid  route_fid  events  storage_delay_source"
+        "avg_edge_delay  avg_route_delay  edge_fid  route_fid  events  "
+        "storage_delay_source"
     )
     for row in rows:
         print(
@@ -78,6 +79,10 @@ def main() -> None:
     print("This is not full entanglement scheduling.")
     print("This is not resource reservation.")
     print("This is not queueing.")
+    print(
+        "successes report path-found outcomes; EDR-valid filtering is "
+        "reflected by route_fid and handled by paper-scale EDR metrics."
+    )
     print()
     _print_table(rows)
 
