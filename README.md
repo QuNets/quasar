@@ -8,7 +8,8 @@ attributes, evaluating architecture-specific feasibility, running routing
 baselines, and collecting experiment traces.
 
 This public release contains the core framework, tests, and runnable demos used
-to exercise the simulator stack. Paper-scale 24-hour Walker-Delta sweeps,
+to exercise the simulator stack, including a small SGP4-backed TLE fixture demo.
+Paper-scale 24-hour Walker-Delta sweeps, the 60-satellite Starlink TLE subset,
 generated datasets, and final figure-generation scripts are maintained
 separately during submission preparation and are not included in this public
 repository.
@@ -16,7 +17,10 @@ repository.
 ## What Is Included
 
 - Core QUASAR Python package under `quasar/`
-- Minimal scenario/data-source layer, including Walker-Delta-lite demos
+- Minimal scenario/data-source layer, including Walker-Delta-lite demos and
+  an SGP4-backed TLE fixture demo
+- Small public TLE fixture under `examples/data/` for validating trace-driven
+  orbital input
 - Spatiotemporal topology generation from explicit time-indexed candidate links
 - Channel loss, success probability, and memory decoherence helpers
 - SD and OOS architecture abstractions
@@ -30,7 +34,7 @@ repository.
 ## Core Modules
 
 - `quasar/scenarios/`: interchangeable scenario sources, including
-  Walker-Delta-lite and trace replay scaffolds.
+  Walker-Delta-lite, trace replay, and SGP4-backed TLE inputs.
 - `quasar/topology/`: sampled dynamic graph construction, visibility masks,
   range constraints, and available edge extraction.
 - `quasar/channel/`: optical-channel loss and path success probability helpers.
@@ -73,6 +77,7 @@ python examples/quasar_experiment_demo.py
 python examples/quasar_routing_batch_demo.py
 python examples/quasar_contact_delay_batch_demo.py
 python examples/quasar_storage_delay_diagnostics_demo.py
+python examples/quasar_tle_trace_demo.py
 ```
 
 ## Scope Notes
@@ -89,5 +94,11 @@ QUASAR exposes timing, channel, and memory attributes for routing and
 orchestration algorithms. The public release does not implement full
 multi-request entanglement scheduling, memory-slot reservation, or queueing.
 
-TLE/SGP4 support is represented as an extensible scenario-source direction, not
-as the basis of the current public demos or experiment scaffolds.
+The public release includes a small SGP4-backed TLE fixture demo to validate the
+trace-driven scenario-source interface. This demo is intended to exercise the
+public topology pipeline, not to reproduce the paper-scale Starlink trace
+experiment.
+
+Paper-scale 24-hour Walker-Delta sweeps, the 60-satellite Starlink TLE subset,
+generated datasets, and final figure-generation scripts are maintained
+separately during submission preparation.
