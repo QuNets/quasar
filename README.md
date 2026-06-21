@@ -86,10 +86,6 @@ The public release includes Walker-Delta scenario demos and sampled
 contact-window storage-delay diagnostics. These are intended for framework
 validation, smoke tests, and reproducible demonstrations of the public API.
 
-Paper-scale 24-hour Walker-Delta sweeps, generated datasets, and
-figure-generation scripts for final manuscript plots are maintained separately
-during submission preparation.
-
 QUASAR exposes timing, channel, and memory attributes for routing and
 orchestration algorithms. The public release does not implement full
 multi-request entanglement scheduling, memory-slot reservation, or queueing.
