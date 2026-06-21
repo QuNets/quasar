@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import exp
 from typing import Any, Iterable, Optional, Tuple
 
 from quasar.experiments.result import ExperimentResult
@@ -19,19 +20,24 @@ def route_diagnostic_rows(result: ExperimentResult) -> Tuple[dict, ...]:
         selected_path = tuple(getattr(record, "path", ()) or ())
         computed = _computed_route_diagnostics(result, record, selected_path)
         route_storage_delay = _diagnostic_value(
+            computed.get("route_storage_delay"),
             metadata.get("route_storage_delay"),
             getattr(record, "storage_delay", None),
-            computed.get("route_storage_delay"),
         )
         route_success_probability = _diagnostic_value(
+            computed.get("route_success_probability"),
             metadata.get("route_success_probability"),
             getattr(record, "success_probability", None),
-            computed.get("route_success_probability"),
         )
         route_fidelity = _diagnostic_value(
+            computed.get("route_fidelity"),
             metadata.get("route_fidelity"),
             getattr(record, "fidelity", None),
-            computed.get("route_fidelity"),
+        )
+        easr_score = _diagnostic_value(
+            computed.get("easr_score"),
+            metadata.get("easr_score"),
+            metadata.get("objective_score"),
         )
         rows.append(
             {
@@ -46,6 +52,7 @@ def route_diagnostic_rows(result: ExperimentResult) -> Tuple[dict, ...]:
                 "route_success_probability": route_success_probability,
                 "route_fidelity": route_fidelity,
                 "objective_score": metadata.get("objective_score"),
+                "easr_score": easr_score,
                 "failure_reason": _failure_reason(route_result),
             }
         )
@@ -135,6 +142,8 @@ def _computed_route_diagnostics(
     request_metadata = getattr(request, "metadata", {}) or {}
     edge_attributes = request_metadata.get("edge_attributes", ())
     edge_map = _edge_attribute_map(edge_attributes)
+    source = getattr(request, "source", None)
+    destination = getattr(request, "destination", None)
     storage_delay = 0.0
     success_probability = 1.0
     for first, second in zip(selected_path, selected_path[1:]):
@@ -147,6 +156,13 @@ def _computed_route_diagnostics(
             probability = getattr(edge, "transmittance", None)
         if probability is not None:
             success_probability *= probability
+        success_probability *= _swap_success_probability(
+            edge,
+            second,
+            source,
+            destination,
+            request_metadata,
+        )
     baseline = getattr(getattr(result, "config", None), "baseline", None)
     f0 = getattr(baseline, "f0", 0.99)
     tau_c = getattr(baseline, "tau_c", 0.1)
@@ -154,7 +170,59 @@ def _computed_route_diagnostics(
         "route_storage_delay": storage_delay,
         "route_success_probability": success_probability,
         "route_fidelity": fidelity_after_storage(storage_delay, f0=f0, tau_c=tau_c),
+        "easr_score": success_probability * exp(-storage_delay / tau_c),
     }
+
+
+def _swap_success_probability(
+    edge: Any,
+    target_node: str,
+    source: Optional[str],
+    destination: Optional[str],
+    request_metadata: dict,
+) -> float:
+    if target_node in (source, destination):
+        return 1.0
+    probability = _lookup_swap_probability(
+        request_metadata.get("swap_success_probabilities", {}),
+        edge,
+        target_node,
+    )
+    if probability is None:
+        probability = getattr(edge, "swap_success_probability", None)
+    if probability is None:
+        probability = getattr(edge, "zeta_swap", None)
+    if probability is None:
+        edge_metadata = getattr(edge, "metadata", {}) or {}
+        probability = edge_metadata.get(
+            "swap_success_probability",
+            edge_metadata.get("zeta_swap"),
+        )
+    if probability is None:
+        probability = request_metadata.get(
+            "swap_success_probability",
+            request_metadata.get("zeta_swap", 1.0),
+        )
+    return probability
+
+
+def _lookup_swap_probability(values: dict, edge: Any, target_node: str):
+    if not values:
+        return None
+    endpoints = getattr(edge, "endpoints", None)
+    if endpoints is None or len(endpoints) != 2:
+        return values.get(target_node)
+    first, second = endpoints
+    for candidate in (
+        target_node,
+        (first, second),
+        (second, first),
+        f"{first}->{second}",
+        f"{second}->{first}",
+    ):
+        if candidate in values:
+            return values[candidate]
+    return None
 
 
 def _edge_attribute_map(edge_attributes: Iterable[Any]) -> dict:
@@ -169,17 +237,12 @@ def _edge_attribute_map(edge_attributes: Iterable[Any]) -> dict:
     return edge_map
 
 
-def _diagnostic_value(metadata_value, record_value, computed_value):
+def _diagnostic_value(computed_value, metadata_value, record_value):
     if computed_value is None:
         if metadata_value is not None:
             return metadata_value
         return record_value
-    if metadata_value is None and record_value is None:
-        return computed_value
-    value = metadata_value if metadata_value is not None else record_value
-    if value == 0.0 and computed_value > 0.0:
-        return computed_value
-    return value
+    return computed_value
 
 
 def _hop_count(path: Iterable[str]) -> int:

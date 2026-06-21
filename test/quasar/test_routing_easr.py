@@ -1,6 +1,6 @@
 """Tests for OOS EASR routing."""
 
-from math import log
+from math import exp, log
 from pathlib import Path
 
 import pytest
@@ -64,12 +64,27 @@ def test_easr_edge_weight_matches_formula():
     weight = easr_edge_weight(
         edge=edge,
         tau_c=0.5,
-        xi=2.0,
+        xi=1.0,
         swap_success_probability=0.5,
         storage_delay=0.25,
     )
 
-    assert weight == pytest.approx(-log(0.8) - log(0.5) + 2.0 * 0.25 / 0.5)
+    assert weight == pytest.approx(-log(0.8) - log(0.5) + 0.25 / 0.5)
+
+
+def test_easr_temporal_scale_defaults_to_paper_aligned_one():
+    edge = EdgeAttributes(
+        edge_type=EdgeType.ISL,
+        endpoints=("sat-a", "sat-b"),
+        transmittance=0.8,
+        storage_delay=0.25,
+    )
+    router = OOSEASRRouter()
+
+    assert router.xi == 1.0
+    assert easr_edge_weight(edge, tau_c=0.5, xi=1.0) == pytest.approx(
+        -log(0.8) + 0.25 / 0.5
+    )
 
 
 def test_easr_selects_higher_combined_score_oos_path():
@@ -130,13 +145,56 @@ def test_easr_route_is_infeasible_below_fidelity_threshold():
         "gs-b",
         metadata={"edge_attributes": edge_attributes},
     )
-    router = OOSEASRRouter(tau_c=0.1, xi=0.0, fidelity_threshold=0.5)
+    router = OOSEASRRouter(tau_c=0.1, xi=1.0, fidelity_threshold=0.5)
 
     result = router.compute_route(snapshot, request, time=0.0)
 
     assert not result.success
-    assert result.reason == "fidelity below threshold"
-    assert result.path_tuple == ("gs-a", "sat-1", "gs-b")
+    assert result.reason == "no OOS EASR path found"
+    assert result.path_tuple == ()
+
+
+def test_easr_prunes_by_cumulative_delay_not_per_edge_delay():
+    snapshot = TopologySnapshot(
+        time=0.0,
+        nodes=("gs-a", "sat-1", "sat-2", "gs-b"),
+        edges=(
+            LinkState(("gs-a", "sat-1"), EdgeType.SGL),
+            LinkState(("sat-1", "sat-2"), EdgeType.ISL),
+            LinkState(("sat-2", "gs-b"), EdgeType.SGL),
+        ),
+    )
+    edge_attributes = (
+        EdgeAttributes(
+            edge_type=EdgeType.SGL,
+            endpoints=("gs-a", "sat-1"),
+            transmittance=0.9,
+            storage_delay=0.04,
+        ),
+        EdgeAttributes(
+            edge_type=EdgeType.ISL,
+            endpoints=("sat-1", "sat-2"),
+            transmittance=0.9,
+            storage_delay=0.04,
+        ),
+        EdgeAttributes(
+            edge_type=EdgeType.SGL,
+            endpoints=("sat-2", "gs-b"),
+            transmittance=0.9,
+            storage_delay=0.04,
+        ),
+    )
+    request = EntanglementRequest(
+        "gs-a",
+        "gs-b",
+        metadata={"edge_attributes": edge_attributes},
+    )
+    router = OOSEASRRouter(tau_c=0.1, fidelity_threshold=0.5)
+
+    result = router.compute_route(snapshot, request, time=0.0)
+
+    assert not result.success
+    assert result.reason == "no OOS EASR path found"
 
 
 def test_easr_tau_c_changes_temporal_penalty():
@@ -156,19 +214,76 @@ def test_easr_tau_c_changes_temporal_penalty():
     assert long_result.path_tuple == ("gs-a", "sat-high", "gs-b")
 
 
-def test_easr_with_xi_zero_is_close_to_success_probability_selection():
+def test_easr_paper_aligned_temporal_term_selects_lower_delay_path():
     request = EntanglementRequest(
         "gs-a",
         "gs-b",
         metadata={"edge_attributes": _edge_attributes(high_delay=10.0)},
     )
-    router = OOSEASRRouter(tau_c=0.1, xi=0.0, fidelity_threshold=0.0)
+    router = OOSEASRRouter(tau_c=0.1, xi=1.0, fidelity_threshold=0.0)
 
     result = router.compute_route(_snapshot(), request, time=0.0)
 
+    assert result.path_tuple == ("gs-a", "sat-low", "gs-b")
+
+
+def test_easr_swap_penalty_applies_only_to_intermediate_relay():
+    snapshot = TopologySnapshot(
+        time=0.0,
+        nodes=("gs-a", "sat-1", "gs-b"),
+        edges=(
+            LinkState(("gs-a", "sat-1"), EdgeType.SGL),
+            LinkState(("sat-1", "gs-b"), EdgeType.SGL),
+        ),
+    )
+    edge_attributes = (
+        EdgeAttributes(
+            edge_type=EdgeType.SGL,
+            endpoints=("gs-a", "sat-1"),
+            transmittance=0.8,
+            storage_delay=0.0,
+        ),
+        EdgeAttributes(
+            edge_type=EdgeType.SGL,
+            endpoints=("sat-1", "gs-b"),
+            transmittance=0.8,
+            storage_delay=0.0,
+        ),
+    )
+    request = EntanglementRequest(
+        "gs-a",
+        "gs-b",
+        metadata={
+            "edge_attributes": edge_attributes,
+            "swap_success_probability": 0.5,
+        },
+    )
+    router = OOSEASRRouter(tau_c=0.1, fidelity_threshold=0.0)
+
+    result = router.compute_route(snapshot, request, time=0.0)
+
     assert result.success
-    assert result.path_tuple == ("gs-a", "sat-high", "gs-b")
-    assert result.success_probability == pytest.approx(0.9 * 0.9)
+    assert result.success_probability == pytest.approx(0.8 * 0.5 * 0.8)
+    assert result.cost == pytest.approx(-log(0.8) - log(0.5) - log(0.8))
+    assert result.metadata["objective_score"] == pytest.approx(0.8 * 0.5 * 0.8)
+
+
+def test_easr_score_matches_paper_objective():
+    request = EntanglementRequest(
+        "gs-a",
+        "gs-b",
+        metadata={
+            "edge_attributes": _edge_attributes(high_delay=0.01),
+            "swap_success_probability": 0.5,
+        },
+    )
+    router = OOSEASRRouter(tau_c=0.1, fidelity_threshold=0.0)
+
+    result = router.compute_route(_snapshot(), request, time=0.0)
+
+    assert result.metadata["objective_score"] == pytest.approx(
+        result.success_probability * exp(-result.storage_delay / 0.1)
+    )
 
 
 def test_easr_does_not_import_or_call_sd_router():

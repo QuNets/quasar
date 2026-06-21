@@ -77,7 +77,7 @@ def _print_route_diagnostics(title, results, limit=3):
                 f"path={path} "
                 f"delay={_format_float(row['route_storage_delay'])} "
                 f"fidelity={_format_float(row['route_fidelity'])} "
-                f"objective={_format_float(row['objective_score'])} "
+                f"easr={_format_float(row['easr_score'])} "
                 f"reason={reason}"
             )
     print()

@@ -21,6 +21,7 @@ class _EASRContext:
     default_swap_success_probability: float
     storage_delays: Mapping[Any, float]
     swap_success_probabilities: Mapping[Any, float]
+    source: str
     destination: str
 
 
@@ -66,6 +67,7 @@ class OOSEASRRouter(Router):
             adjacency,
             request.source,
             request.destination,
+            context,
         )
         if not path:
             return RouteResult(
@@ -92,6 +94,7 @@ class OOSEASRRouter(Router):
                 metadata={
                     "routing": self.name,
                     "objective_score": score["objective_score"],
+                    "easr_score": score["objective_score"],
                 },
             )
 
@@ -106,6 +109,7 @@ class OOSEASRRouter(Router):
             metadata={
                 "routing": self.name,
                 "objective_score": score["objective_score"],
+                "easr_score": score["objective_score"],
             },
         )
 
@@ -117,7 +121,11 @@ def easr_edge_weight(
     swap_success_probability: float = 1.0,
     storage_delay: Optional[float] = None,
 ) -> float:
-    """Return ``-ln eta - ln zeta + xi * storage_delay / tau_c``."""
+    """Return paper-aligned ``-ln eta - ln zeta + storage_delay / tau_c``.
+
+    ``xi`` is retained for API compatibility and is intentionally not applied
+    to the paper-aligned temporal term.
+    """
 
     _validate_positive(tau_c, "tau_c")
     _validate_non_negative(xi, "xi")
@@ -127,7 +135,7 @@ def easr_edge_weight(
     return (
         safe_negative_log(_edge_transmittance(edge))
         + safe_negative_log(swap_success_probability)
-        + xi * delay / tau_c
+        + delay / tau_c
     )
 
 
@@ -149,9 +157,7 @@ def easr_path_score(
         success_probability *= _swap_success_probability(edge, second, context)
         storage_delay += _storage_delay(edge, second, context)
 
-    objective_score = success_probability * exp(
-        -context.xi * storage_delay / context.tau_c,
-    )
+    objective_score = success_probability * exp(-storage_delay / context.tau_c)
     return {
         "success_probability": success_probability,
         "storage_delay": storage_delay,
@@ -180,6 +186,7 @@ def _context_from_request(
         swap_success_probabilities=dict(
             metadata.get("swap_success_probabilities", {}),
         ),
+        source=request.source,
         destination=request.destination,
     )
 
@@ -194,8 +201,8 @@ def _routing_edges(graph: Any, request: EntanglementRequest) -> Iterable[Any]:
 def _weighted_adjacency(
     edges: Iterable[Any],
     context: _EASRContext,
-) -> Dict[str, Tuple[Tuple[str, float], ...]]:
-    adjacency: Dict[str, List[Tuple[str, float]]] = {}
+) -> Dict[str, Tuple[Tuple[str, float, Any], ...]]:
+    adjacency: Dict[str, List[Tuple[str, float, Any]]] = {}
     for edge in edges:
         if not getattr(edge, "available", True):
             continue
@@ -203,26 +210,19 @@ def _weighted_adjacency(
         _add_directed_edge(adjacency, first, second, edge, context)
         _add_directed_edge(adjacency, second, first, edge, context)
     return {
-        node: tuple(sorted(neighbors))
+        node: tuple(sorted(neighbors, key=lambda item: (item[0], item[1])))
         for node, neighbors in sorted(adjacency.items())
     }
 
 
 def _add_directed_edge(
-    adjacency: Dict[str, List[Tuple[str, float]]],
+    adjacency: Dict[str, List[Tuple[str, float, Any]]],
     first: str,
     second: str,
     edge: Any,
     context: _EASRContext,
 ) -> None:
     storage_delay = _storage_delay(edge, second, context)
-    fidelity = fidelity_after_storage(
-        delta_tau=storage_delay,
-        f0=context.initial_fidelity,
-        tau_c=context.tau_c,
-    )
-    if not is_fidelity_feasible(fidelity, context.fidelity_threshold):
-        return
     weight = easr_edge_weight(
         edge=edge,
         tau_c=context.tau_c,
@@ -232,13 +232,14 @@ def _add_directed_edge(
     )
     if isinf(weight):
         return
-    adjacency.setdefault(first, []).append((second, weight))
+    adjacency.setdefault(first, []).append((second, weight, edge))
 
 
 def _minimum_weight_path(
-    adjacency: Dict[str, Tuple[Tuple[str, float], ...]],
+    adjacency: Dict[str, Tuple[Tuple[str, float, Any], ...]],
     source: str,
     destination: str,
+    context: _EASRContext,
 ) -> Tuple[Tuple[str, ...], Optional[float]]:
     if source == destination:
         return (source,), 0.0
@@ -246,6 +247,7 @@ def _minimum_weight_path(
         return (), None
 
     distances: Dict[str, float] = {source: 0.0}
+    cumulative_delays: Dict[str, float] = {source: 0.0}
     predecessors: Dict[str, Optional[str]] = {source: None}
     heap = [(0.0, source)]
     while heap:
@@ -257,11 +259,22 @@ def _minimum_weight_path(
                 reconstruct_path(predecessors, source, destination),
                 distance,
             )
-        for neighbor, weight in adjacency.get(node, ()):
+        for neighbor, weight, edge in adjacency.get(node, ()):
+            candidate_delay = (
+                cumulative_delays[node] + _storage_delay(edge, neighbor, context)
+            )
+            fidelity = fidelity_after_storage(
+                delta_tau=candidate_delay,
+                f0=context.initial_fidelity,
+                tau_c=context.tau_c,
+            )
+            if not is_fidelity_feasible(fidelity, context.fidelity_threshold):
+                continue
             candidate = distance + weight
             if candidate >= distances.get(neighbor, float("inf")):
                 continue
             distances[neighbor] = candidate
+            cumulative_delays[neighbor] = candidate_delay
             predecessors[neighbor] = node
             heappush(heap, (candidate, neighbor))
     return (), None
@@ -320,7 +333,7 @@ def _swap_success_probability(
     target_node: str,
     context: _EASRContext,
 ) -> float:
-    if target_node == context.destination:
+    if target_node in (context.source, context.destination):
         return 1.0
     probability = _lookup_by_edge_or_node(
         context.swap_success_probabilities,

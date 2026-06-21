@@ -1,8 +1,12 @@
 """Tests for experiment diagnostics helpers."""
 
 from pathlib import Path
+from math import exp
 from types import SimpleNamespace
 
+import pytest
+
+from quasar.channel.models import EdgeAttributes, EdgeType
 from quasar.experiments import (
     ExperimentConfig,
     QuasarExperimentRunner,
@@ -12,6 +16,8 @@ from quasar.experiments import (
     route_diagnostic_rows,
     storage_delay_summary,
 )
+from quasar.memory.decoherence import fidelity_after_storage
+from quasar.routing import EntanglementRequest
 
 
 def _config(policy="zero_policy", routing_algorithm="easr"):
@@ -82,6 +88,64 @@ def test_missing_diagnostic_fields_return_unknown_or_none():
     assert row["route_storage_delay"] is None
     assert row["objective_score"] is None
     assert row["failure_reason"] == "unknown"
+
+
+def test_route_diagnostics_match_selected_path_probability_delay_and_fidelity():
+    edge_attributes = (
+        EdgeAttributes(
+            edge_type=EdgeType.SGL,
+            endpoints=("gs-a", "sat-1"),
+            transmittance=0.8,
+            success_probability=0.8,
+            storage_delay=0.1,
+        ),
+        EdgeAttributes(
+            edge_type=EdgeType.SGL,
+            endpoints=("sat-1", "gs-b"),
+            transmittance=0.7,
+            success_probability=0.7,
+            storage_delay=0.2,
+        ),
+    )
+    request = EntanglementRequest(
+        "gs-a",
+        "gs-b",
+        metadata={
+            "edge_attributes": edge_attributes,
+            "swap_success_probability": 0.5,
+        },
+    )
+    result = SimpleNamespace(
+        config=SimpleNamespace(baseline=SimpleNamespace(f0=0.99, tau_c=0.1)),
+        path_trace=SimpleNamespace(
+            records=(
+                SimpleNamespace(
+                    time=0.0,
+                    architecture="oos",
+                    algorithm="easr",
+                    success=True,
+                    path=("gs-a", "sat-1", "gs-b"),
+                    storage_delay=None,
+                    success_probability=0.8 * 0.7,
+                    fidelity=0.99,
+                    request=request,
+                    metadata={},
+                ),
+            )
+        ),
+        route_results=(SimpleNamespace(success=True, reason=None, metadata={}),),
+    )
+
+    row = route_diagnostic_rows(result)[0]
+
+    assert row["route_storage_delay"] == pytest.approx(0.3)
+    assert row["route_success_probability"] == pytest.approx(0.8 * 0.5 * 0.7)
+    assert row["route_fidelity"] == pytest.approx(
+        fidelity_after_storage(0.3, f0=0.99, tau_c=0.1)
+    )
+    assert row["easr_score"] == pytest.approx(
+        row["route_success_probability"] * exp(-0.3 / 0.1)
+    )
 
 
 def test_zero_policy_average_route_delay_is_zero_or_none():
