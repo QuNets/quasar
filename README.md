@@ -11,8 +11,7 @@ This public release contains the core framework, tests, and runnable demos used
 to exercise the simulator stack, including a small SGP4-backed TLE fixture demo.
 Paper-scale 24-hour Walker-Delta sweeps, the 60-satellite Starlink TLE subset,
 generated datasets, and final figure-generation scripts are maintained
-separately during submission preparation and are not included in this public
-repository.
+separately and are not included in this public repository.
 
 ## What Is Included
 
@@ -97,4 +96,4 @@ experiment.
 
 Paper-scale 24-hour Walker-Delta sweeps, the 60-satellite Starlink TLE subset,
 generated datasets, and final figure-generation scripts are maintained
-separately during submission preparation.
+separately and are not included in this public repository.
